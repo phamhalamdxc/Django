@@ -1,0 +1,295 @@
+models --> admin:
+=======================================================================
+models:
+
+from django.db import models
+
+# Create your models here.
+class Post(models.Model):
+    text = models.CharField(max_length=140, blank=False, null=False )
+
+    def __str__(self) :
+        return self.text
+=======================================================================
+admin:
+
+from django.contrib import admin
+from .models import Post
+
+# Register your models here.
+class PostAdmin(admin.ModelAdmin):
+    pass
+admin.site.register(Post, PostAdmin)
+=========================================================================
+=========================================================================
+
+views(HomePageView) --> urls(feed)--> urls(mysite) -->settings -->templates --> home.html
+
+==========================================================================
+views:
+
+from django.views.generic import TemplateView
+
+# Create your views here.
+class HomePageView(TemplateView):
+    template_name = "home.html"
+==========================================================================
+urls(feed):
+
+from django.urls import path
+from .views import HomePageView
+
+app_name = 'feed'
+
+urlpatterns = [
+    path('', HomePageView.as_view(), name='index'),
+]
+===========================================================================
+urls(mysite):
+
+from django.conf.urls import include
+from feed import urls as feed_urls
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', include(feed_urls, namespace='feed'))
+]
+===========================================================================
+settings:
+
+import os
+
+TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [TEMPLATE_DIR],
+        'APP_DIRS': True,
+
+    }]
+============================================================================
+templates/home.html
+
+{% extends 'base.html' %}
+
+{% block body %}
+    <h1>Home page!</h1>
+{% endblock body %}
+=============================================================================
+=============================================================================
+Display posts from Db to home page:
+============================================================================
+views:
+
+def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['post'] = Post.objects.all()
+        return context
+
+home.html:
+
+{% for post in posts %}
+    {{post.text}}   (post is object)
+{% endfor %}
+==================================================================================
+Upload Image to Db:
+
+models:
+
+from sorl.thumbnail import ImageField  (pip3 install sorl-thumbnail, pip install Pillow)
+
+ class Post(models.Model):
+    text = models.CharField(max_length=140, blank=False, null=False )
+    image = ImageField()
+
+    def __str__(self) :
+        return self.text
+run migrate, makemigrations...
+=======================================================================================
+Create Folder Image :
+ settings:
+
+MEDIA_URL = '/media/'
+
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
+
+ urls(mysite):
+from django.conf import settings
+from django.conf.urls.static import static
+
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', include(feed_urls, namespace='feed'))
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+======================================================================================
+Add image to home.html:
+
+home.html:
+{% load thumbnail %}
+{% block body %}
+    {% for post in posts %}
+        {{post.text}} <br>
+        {% thumbnail post.image "200x200" crop="center" as im %}
+            <img src="{{ im.url }}" width="{{ im.width }}" height="{{ im.height }}">
+        {% endthumbnail %}
+        <hr>
+    {% endfor %}
+{% endblock body %}
+---------------------------------------------------------------------------------------
+Add detai view:
+from django.views.generic import TemplateView, DetailView
+
+class PostDetailView(DetailView):
+    template_name = "detail.html"
+    model = Post
+
+urls(feed):
+from .views import HomePageView, PostDetailView
+
+urlpatterns = [
+    path('', HomePageView.as_view(), name='index'),
+    path('detail/<int:pk>/', PostDetailView.as_view(), name='detail'),
+]
+
+detail.html:
+
+{% extends 'base.html' %}
+
+{% block title %} Detail Page{% endblock  %}
+
+{% block body %}{% endblock  %}
+------------------------------------------------------------------------
+
+{% block body %}
+    <a href="{% url 'feed:index' %}">&larr; Go back!</a>
+    <h3>Text</h3>
+    {{object.text}}
+    <h3>Image</h3>
+    <img src="{{object.image.url}}" alt="">
+{% endblock  %}
+=================================================================================
+home.html:
+
+{% block body %}
+    {% for post in posts %}
+        <a href="/detail/{{post.id}}/">View Detail</a>
+        {{post.text}} <br>
+        {% thumbnail post.image "200x200" crop="center" as im %}
+            <img src="{{ im.url }}" width="{{ im.width }}" height="{{ im.height }}">
+        {% endthumbnail %}
+        <hr>
+    {% endfor %}
+{% endblock body %}
+------------------------------------------------------------------------------------
+{% block body %}
+    {% for post in posts %}
+        <a href="{% url 'feed:detail' post.id %}" style="display: inline-block">
+            {{post.text}} <br>
+            {% thumbnail post.image "200x200" crop="center" as im %}
+                <img src="{{ im.url }}" width="{{ im.width }}" height="{{ im.height }}">
+            {% endthumbnail %}
+        </a>
+        <hr>
+    {% endfor %}
+{% endblock body %}
+=========================================================================================
+Add form Post:
+
+forms.py:
+from django import forms
+
+class PostForm(forms.Form):
+    text = forms.CharField()
+    image =forms.FileField()
+
+
+ views.py:
+
+ class AddPostView(FormView):
+    template_name = "new_post.html"
+    form_class = PostForm
+    success_url = "/"
+
+    def form_valid(self, form):
+        # This method is called when valid form data has been POSTed.
+        # It should return an HttpResponse.
+        # form.send_email()
+        # create  a new post
+        new_object = Post.objects.create(
+            text = form.cleaned_data['text'],
+            image = form.cleaned_data['image']
+        )
+        return super().form_valid(form)
+urls.py:
+
+from django.urls import path
+from .views import HomePageView, PostDetailView, AddPostView
+
+
+app_name = 'feed'
+
+urlpatterns = [
+    path('', HomePageView.as_view(), name='index'),
+    path('detail/<int:pk>/', PostDetailView.as_view(), name='detail'),
+    path('post/', AddPostView.as_view(), name='post'),
+]
+
+new_post.html:
+
+{% extends 'base.html' %}
+
+{% block title %} Upload Image{% endblock  %}
+
+{% block body %}
+    <form method="post" action="" enctype="multipart/form-data">{% csrf_token %}
+        {{ form.as_p }}
+        <div>
+            <button ype="submit" > Submit </button>
+        </div>
+    </form>
+{% endblock  %}
+=======================================================================================
+
+Django messages framework:
+
+views.py: (messages, request)
+from django.contrib import messages
+
+class AddPostView(FormView):
+    template_name = "new_post.html"
+    form_class = PostForm
+    success_url = "/"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.request = request
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        # This method is called when valid form data has been POSTed.
+        # It should return an HttpResponse.
+        # form.send_email()
+        # create  a new post
+        new_object = Post.objects.create(
+            text = form.cleaned_data['text'],
+            image = form.cleaned_data['image']
+        )
+        messages.add_message(self.request, messages.SUCCESS, 'Your post was successful!')
+        return super().form_valid(form)
+
+base.html:
+
+{% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+            <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+            {% endfor %}
+        </ul>
+{% endif %}
+
+=====================================================================================================
+
